@@ -1,5 +1,7 @@
 mod commands;
 mod db;
+mod due;
+mod scheduler;
 mod tray;
 
 use std::sync::Mutex;
@@ -13,6 +15,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::show_main(app);
         }))
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--hidden"]),
@@ -36,7 +39,12 @@ pub fn run() {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             let connection = db::open(&dir.join("open-medication.sqlite"))?;
-            app.manage(commands::AppDb(Mutex::new(connection)));
+            let wake = scheduler::wake();
+            scheduler::spawn(app.handle().clone(), wake.clone());
+            app.manage(commands::AppDb {
+                connection: Mutex::new(connection),
+                wake,
+            });
             tray::install_tray(app.handle())?;
             let _ = app.autolaunch().enable();
             if !std::env::args().any(|arg| arg == "--hidden") {
