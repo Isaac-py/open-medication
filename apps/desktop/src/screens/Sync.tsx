@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { useState, type FormEvent } from "react";
-import { pullAccount } from "../sync/remote";
+import { useEffect, useState, type FormEvent } from "react";
+import { pullAccount, pushAccount, subscribeAccount } from "../sync/remote";
 
 const urlKey = "open-medication.supabase.url";
 const anonKey = "open-medication.supabase.anon";
@@ -12,6 +12,12 @@ export function Sync() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [client, setClient] = useState<SupabaseClient | null>(null);
+
+  useEffect(() => {
+    if (!client) return;
+    return subscribeAccount(client, () => setMessage("Updated from your other device."));
+  }, [client]);
 
   async function signIn(event: FormEvent) {
     event.preventDefault();
@@ -24,7 +30,9 @@ export function Sync() {
       localStorage.setItem(urlKey, url.trim());
       localStorage.setItem(anonKey, key.trim());
       await pullAccount(client);
-      setMessage("Signed in. Medicines on this laptop match your account.");
+      await pushAccount(client);
+      setClient(client);
+      setMessage("Signed in. This laptop will send doses and pick up changes.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not sign in");
     }
@@ -53,7 +61,7 @@ export function Sync() {
           Password
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
         </label>
-        <button type="submit">Sign in and pull</button>
+        <button type="submit">Sign in and sync</button>
       </form>
       {message ? <p className="empty">{message}</p> : null}
       {error ? <p className="error">{error}</p> : null}

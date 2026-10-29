@@ -41,6 +41,82 @@ interface RemoteDoseLog {
   updated_at: string;
 }
 
+export async function pushAccount(client: SupabaseClient): Promise<void> {
+  const user = await client.auth.getUser();
+  if (user.error) throw user.error;
+  const userId = user.data.user?.id;
+  if (!userId) throw new Error("Sign in before pushing doses.");
+  const library = await loadLibrary();
+
+  if (library.medications.length > 0) {
+    const saved = await client.from("medications").upsert(
+      library.medications.map((medication) => ({
+        id: medication.id,
+        user_id: userId,
+        name: medication.name,
+        dosage: medication.dosage,
+        food_requirement: medication.foodRequirement,
+        note: medication.note,
+        archived_at: medication.archivedAt,
+        updated_at: medication.updatedAt,
+      })),
+    );
+    if (saved.error) throw saved.error;
+  }
+
+  if (library.schedules.length > 0) {
+    const saved = await client.from("schedules").upsert(
+      library.schedules.map((schedule) => ({
+        id: schedule.id,
+        user_id: userId,
+        medication_id: schedule.medicationId,
+        hour: schedule.hour,
+        minute: schedule.minute,
+        days_of_week: schedule.daysOfWeek,
+        grace_minutes: schedule.graceMinutes,
+        updated_at: schedule.updatedAt,
+      })),
+    );
+    if (saved.error) throw saved.error;
+  }
+
+  if (library.doseLogs.length > 0) {
+    const saved = await client.from("dose_logs").upsert(
+      library.doseLogs.map((log) => ({
+        id: log.id,
+        user_id: userId,
+        medication_id: log.medicationId,
+        schedule_id: log.scheduleId,
+        scheduled_for: log.scheduledFor,
+        status: log.status,
+        taken_at: log.takenAt,
+        with_food: log.withFood,
+        device: log.device,
+        updated_at: log.updatedAt,
+      })),
+    );
+    if (saved.error) throw saved.error;
+  }
+}
+
+export function subscribeAccount(client: SupabaseClient, onChange: () => void): () => void {
+  const channel = client
+    .channel("open-medication")
+    .on("postgres_changes", { event: "*", schema: "public", table: "medications" }, () => {
+      void pullAccount(client).then(onChange);
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "schedules" }, () => {
+      void pullAccount(client).then(onChange);
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "dose_logs" }, () => {
+      void pullAccount(client).then(onChange);
+    })
+    .subscribe();
+  return () => {
+    void client.removeChannel(channel);
+  };
+}
+
 export async function pullAccount(client: SupabaseClient): Promise<void> {
   const library = await loadLibrary();
   const medications = await client
