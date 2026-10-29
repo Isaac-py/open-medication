@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Duration, Local, TimeZone};
+use chrono::{DateTime, Datelike, Duration, Local, TimeZone, Timelike};
 
 use crate::db::{DoseLogRow, Library, ScheduleRow, SnoozeRow};
 
@@ -12,32 +12,47 @@ pub struct DueDose {
     pub fire_at: DateTime<Local>,
 }
 
-pub fn next_due(library: &Library, now: DateTime<Local>) -> Option<DueDose> {
-    let mut best: Option<DueDose> = None;
-    for schedule in &library.schedules {
-        let Some(medication) = library
-            .medications
-            .iter()
-            .find(|medication| medication.id == schedule.medication_id && medication.archived_at.is_none())
-        else {
-            continue;
-        };
-        if !valid_schedule(schedule) {
-            continue;
-        }
-        let lookback = (schedule.grace_minutes + (60 * 24) - 1) / (60 * 24) + 1;
-        for offset in -lookback..=8 {
-            let Some(day) = now.date_naive().checked_add_signed(Duration::days(offset as i64)) else {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissedDose {
+    pub medication_id: String,
+    pub schedule_id: String,
+    pub scheduled_for: DateTime<Local>,
+}
+
+pub fn missed_doses(library: &Library, now: DateTime<Local>) -> Vec<MissedDose> {
+    let mut missed = Vec::new();
+    for schedule in active_schedules(library) {
+        for offset in -7..=0 {
+            let Some(scheduled_for) = occurrence(&schedule, now, offset) else {
                 continue;
             };
-            let weekday = day.weekday().num_days_from_sunday() as i32;
-            if !schedule.days_of_week.contains(&weekday) {
+            if scheduled_for > now {
                 continue;
             }
-            let Some(scheduled_for) = Local
-                .with_ymd_and_hms(day.year(), day.month(), day.day(), schedule.hour as u32, schedule.minute as u32, 0)
-                .single()
-            else {
+            let grace_ends = scheduled_for + Duration::minutes(schedule.grace_minutes as i64);
+            let snooze_pending = snooze_until(&library.snoozes, &schedule.id, scheduled_for).is_some_and(|until| now < until);
+            if now < grace_ends || snooze_pending || logged(&library.dose_logs, &schedule.id, scheduled_for) {
+                continue;
+            }
+            missed.push(MissedDose {
+                medication_id: schedule.medication_id.clone(),
+                schedule_id: schedule.id.clone(),
+                scheduled_for,
+            });
+        }
+    }
+    missed
+}
+
+pub fn next_due(library: &Library, now: DateTime<Local>) -> Option<DueDose> {
+    let mut best: Option<DueDose> = None;
+    for schedule in active_schedules(library) {
+        let Some(medication) = library.medications.iter().find(|medication| medication.id == schedule.medication_id) else {
+            continue;
+        };
+        let lookback = (schedule.grace_minutes + (60 * 24) - 1) / (60 * 24) + 1;
+        for offset in -lookback..=8 {
+            let Some(scheduled_for) = occurrence(schedule, now, offset) else {
                 continue;
             };
             let grace_ends = scheduled_for + Duration::minutes(schedule.grace_minutes as i64);
@@ -72,6 +87,30 @@ pub fn next_due(library: &Library, now: DateTime<Local>) -> Option<DueDose> {
         }
     }
     best
+}
+
+fn active_schedules(library: &Library) -> Vec<&ScheduleRow> {
+    library
+        .schedules
+        .iter()
+        .filter(|schedule| {
+            valid_schedule(schedule)
+                && library.medications.iter().any(|medication| {
+                    medication.id == schedule.medication_id && medication.archived_at.is_none()
+                })
+        })
+        .collect()
+}
+
+fn occurrence(schedule: &ScheduleRow, now: DateTime<Local>, offset: i32) -> Option<DateTime<Local>> {
+    let day = now.date_naive().checked_add_signed(Duration::days(offset as i64))?;
+    let weekday = day.weekday().num_days_from_sunday() as i32;
+    if !schedule.days_of_week.contains(&weekday) {
+        return None;
+    }
+    Local
+        .with_ymd_and_hms(day.year(), day.month(), day.day(), schedule.hour as u32, schedule.minute as u32, 0)
+        .single()
 }
 
 fn valid_schedule(schedule: &ScheduleRow) -> bool {
@@ -152,6 +191,13 @@ mod tests {
         let due = next_due(&library(9), now).unwrap();
         assert_eq!(due.fire_at, Local.with_ymd_and_hms(2026, 10, 29, 9, 0, 0).single().unwrap());
         assert_eq!(due.food_text, "Take with food");
+    }
+
+    #[test]
+    fn marks_a_dose_missed_after_the_grace_window() {
+        let now = Local.with_ymd_and_hms(2026, 10, 29, 11, 0, 0).single().unwrap();
+        let missed = missed_doses(&library(9), now);
+        assert!(missed.iter().any(|dose| dose.scheduled_for.hour() == 9 && dose.scheduled_for.day() == 29));
     }
 
     #[test]
