@@ -54,6 +54,11 @@ pub fn save_dose_log(db: State<AppDb>, dose_log: DoseLogRow) -> Result<(), Strin
 }
 
 #[tauri::command]
+pub fn delete_dose_log(db: State<AppDb>, id: String) -> Result<(), String> {
+    mutate(&db, |connection| db::delete_dose_log(connection, &id))
+}
+
+#[tauri::command]
 pub fn save_snooze(db: State<AppDb>, snooze: SnoozeRow) -> Result<(), String> {
     mutate(&db, |connection| db::upsert_snooze(connection, &snooze))
 }

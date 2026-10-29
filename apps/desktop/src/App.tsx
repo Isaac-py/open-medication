@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { History } from "./screens/History";
 import { Medicines } from "./screens/Medicines";
+import { Sync } from "./screens/Sync";
 import { Today } from "./screens/Today";
 
-type Screen = "today" | "medicines" | "history";
+type Screen = "today" | "medicines" | "history" | "sync";
 
 export function App() {
   const [screen, setScreen] = useState<Screen>("today");
@@ -20,10 +21,14 @@ export function App() {
         <button type="button" className={screen === "history" ? "" : "quiet"} onClick={() => setScreen("history")}>
           History
         </button>
+        <button type="button" className={screen === "sync" ? "" : "quiet"} onClick={() => setScreen("sync")}>
+          Sync
+        </button>
       </nav>
       {screen === "today" ? <Today /> : null}
       {screen === "medicines" ? <Medicines /> : null}
       {screen === "history" ? <History /> : null}
+      {screen === "sync" ? <Sync /> : null}
     </main>
   );
 }

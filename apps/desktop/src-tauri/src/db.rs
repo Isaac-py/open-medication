@@ -201,6 +201,12 @@ pub fn upsert_dose_log(conn: &Connection, row: &DoseLogRow) -> Result<(), String
     .map_err(|error| error.to_string())
 }
 
+pub fn delete_dose_log(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute("delete from dose_logs where id = ?1", [id])
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 pub fn upsert_snooze(conn: &Connection, row: &SnoozeRow) -> Result<(), String> {
     conn.execute(
         "insert into snoozes (schedule_id, scheduled_for, until) values (?1, ?2, ?3)

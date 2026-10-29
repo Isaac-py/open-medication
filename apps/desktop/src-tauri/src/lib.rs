@@ -33,6 +33,7 @@ pub fn run() {
             commands::save_schedule,
             commands::delete_schedule,
             commands::save_dose_log,
+            commands::delete_dose_log,
             commands::save_snooze,
         ])
         .setup(|app| {

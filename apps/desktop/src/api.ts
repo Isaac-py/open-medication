@@ -37,6 +37,10 @@ export function saveDoseLog(doseLog: DoseLog): Promise<void> {
   return invoke("save_dose_log", { doseLog });
 }
 
+export function deleteDoseLog(id: string): Promise<void> {
+  return invoke("delete_dose_log", { id });
+}
+
 export function saveSnooze(snooze: Snooze): Promise<void> {
   return invoke("save_snooze", { snooze });
 }
