@@ -1,6 +1,10 @@
+mod commands;
+mod db;
 mod tray;
 
-use tauri::WindowEvent;
+use std::sync::Mutex;
+
+use tauri::{Manager, WindowEvent};
 use tauri_plugin_autostart::ManagerExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -19,7 +23,20 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
+        .invoke_handler(tauri::generate_handler![
+            commands::load_library,
+            commands::save_medication,
+            commands::remove_medication,
+            commands::save_schedule,
+            commands::delete_schedule,
+            commands::save_dose_log,
+            commands::save_snooze,
+        ])
         .setup(|app| {
+            let dir = app.path().app_data_dir()?;
+            std::fs::create_dir_all(&dir)?;
+            let connection = db::open(&dir.join("open-medication.sqlite"))?;
+            app.manage(commands::AppDb(Mutex::new(connection)));
             tray::install_tray(app.handle())?;
             let _ = app.autolaunch().enable();
             if !std::env::args().any(|arg| arg == "--hidden") {
