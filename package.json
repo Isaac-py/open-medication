@@ -1,0 +1,12 @@
+{
+  "name": "open-medication",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm run test -w @open-medication/core",
+    "typecheck": "npm run typecheck -w @open-medication/core"
+  }
+}
