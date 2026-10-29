@@ -130,6 +130,13 @@ select {
   gap: 12px;
 }
 
+.history-day h2 {
+  margin: 24px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #5f7d6a;
+}
+
 .error {
   color: #8d5f58;
 }
