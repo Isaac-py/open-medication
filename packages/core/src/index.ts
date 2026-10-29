@@ -1,3 +1,5 @@
+export { nextAlarm } from "./alarm";
+export type { Alarm } from "./alarm";
 export { foodReminder, usualWithFood } from "./food";
 export type {
   DoseLog,
