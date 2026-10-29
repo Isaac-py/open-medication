@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { nextAlarm } from "../src/alarm";
+import type { Snooze } from "../src/types";
 import { doseLog, schedule } from "./support";
+
+function snooze(until: Date, scheduledFor = new Date(2026, 9, 29, 9, 0, 0)): Snooze {
+  return { scheduleId: "s1", scheduledFor: scheduledFor.toISOString(), until: until.toISOString() };
+}
 
 describe("nextAlarm", () => {
   it("fires at the scheduled time when the dose is still ahead", () => {
@@ -50,6 +55,30 @@ describe("nextAlarm", () => {
     );
 
     expect(alarm?.scheduleId).toBe("early");
+  });
+
+  it("waits until a snoozed dose is due again", () => {
+    const now = new Date(2026, 9, 29, 9, 5, 0);
+    const until = new Date(2026, 9, 29, 9, 15, 0);
+    const alarm = nextAlarm([schedule()], [], now, [snooze(until)]);
+
+    expect(alarm?.fireAt).toEqual(until);
+    expect(alarm?.scheduledFor).toEqual(new Date(2026, 9, 29, 9, 0, 0));
+  });
+
+  it("still rings at the snooze time after the grace window has closed", () => {
+    const now = new Date(2026, 9, 29, 10, 5, 0);
+    const until = new Date(2026, 9, 29, 10, 10, 0);
+    const alarm = nextAlarm([schedule()], [], now, [snooze(until)]);
+
+    expect(alarm?.fireAt).toEqual(until);
+  });
+
+  it("rings immediately when the snooze has already expired", () => {
+    const now = new Date(2026, 9, 29, 9, 20, 0);
+    const alarm = nextAlarm([schedule()], [], now, [snooze(new Date(2026, 9, 29, 9, 10, 0))]);
+
+    expect(alarm?.fireAt).toEqual(now);
   });
 
   it("ignores a schedule with no weekdays", () => {

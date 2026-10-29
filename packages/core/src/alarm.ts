@@ -1,5 +1,5 @@
 import { eachScheduledDay, isValidSchedule, lookbackDays } from "./schedule";
-import type { DoseLog, Schedule } from "./types";
+import type { DoseLog, Schedule, Snooze } from "./types";
 import { occurrenceKey } from "./time";
 
 export interface Alarm {
@@ -10,17 +10,29 @@ export interface Alarm {
   graceEndsAt: Date;
 }
 
-export function nextAlarm(schedules: Schedule[], logs: DoseLog[], now: Date): Alarm | null {
+export function nextAlarm(
+  schedules: Schedule[],
+  logs: DoseLog[],
+  now: Date,
+  snoozes: Snooze[] = [],
+): Alarm | null {
   const logged = new Set(logs.map((log) => occurrenceKey(log.scheduleId, log.scheduledFor)));
+  const snoozeUntil = new Map(
+    snoozes.map((snooze) => [occurrenceKey(snooze.scheduleId, snooze.scheduledFor), Date.parse(snooze.until)]),
+  );
   let best: Alarm | null = null;
 
   for (const schedule of schedules) {
     if (!isValidSchedule(schedule)) continue;
     const occurrences = eachScheduledDay(schedule, -lookbackDays(schedule.graceMinutes), 8, now);
     for (const occurrence of occurrences) {
-      if (now.getTime() >= occurrence.graceEndsAt.getTime()) continue;
-      if (logged.has(occurrenceKey(occurrence.scheduleId, occurrence.scheduledFor))) continue;
-      const fireAt = occurrence.scheduledFor.getTime() > now.getTime() ? occurrence.scheduledFor : now;
+      const key = occurrenceKey(occurrence.scheduleId, occurrence.scheduledFor);
+      const until = snoozeUntil.get(key);
+      const snoozePending = until !== undefined && now.getTime() < until;
+      if (now.getTime() >= occurrence.graceEndsAt.getTime() && !snoozePending) continue;
+      if (logged.has(key)) continue;
+      let fireAt = occurrence.scheduledFor.getTime() > now.getTime() ? occurrence.scheduledFor : now;
+      if (until !== undefined && until > fireAt.getTime()) fireAt = new Date(until);
       const alarm: Alarm = { ...occurrence, fireAt };
       if (isEarlierAlarm(alarm, best)) best = alarm;
     }
